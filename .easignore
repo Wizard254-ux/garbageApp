@@ -1,0 +1,19 @@
+# Node modules
+node_modules
+# Build artifacts
+build
+dist
+# System files
+.DS_Store
+Thumbs.db
+# IDE and editor configs
+.vscode
+.idea
+# Git
+.git
+.gitignore
+# Test and coverage
+__tests__
+coverage
+# Logs
+*.log
