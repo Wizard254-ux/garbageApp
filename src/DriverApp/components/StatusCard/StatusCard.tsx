@@ -7,12 +7,14 @@ interface StatusCardProps {
   driverStatus?: 'active' | 'inactive' | 'on-route';
   activeRoute?: string;
   loading?: boolean;
+  showActiveRoute?: boolean;
 }
 
 export const StatusCard: React.FC<StatusCardProps> = ({
   driverStatus = 'active',
   activeRoute = 'No active route',
-  loading = false
+  loading = false,
+  showActiveRoute = false
 }) => {
   const { colors } = useTheme();
   
@@ -27,6 +29,9 @@ export const StatusCard: React.FC<StatusCardProps> = ({
   };
 
   const getStatusText = () => {
+    if (showActiveRoute) {
+      return 'Active Route';
+    }
     switch (driverStatus) {
       case 'active': return 'Available for Pickups';
       case 'on-route': return 'Currently on Route';
@@ -43,14 +48,24 @@ export const StatusCard: React.FC<StatusCardProps> = ({
         </View>
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.infoRow}>
-          <Text style={styles.label}>Active Route</Text>
-          <Text style={styles.routeValue}>
+      {!showActiveRoute && (
+        <View style={styles.content}>
+          <View style={styles.infoRow}>
+            <Text style={styles.label}>Active Route</Text>
+            <Text style={styles.routeValue}>
+              {loading ? 'Loading...' : activeRoute}
+            </Text>
+          </View>
+        </View>
+      )}
+      
+      {showActiveRoute && (
+        <View style={styles.content}>
+          <Text style={styles.routeDisplayValue}>
             {loading ? 'Loading...' : activeRoute}
           </Text>
         </View>
-      </View>
+      )}
     </View>
   );
 };
@@ -105,5 +120,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 14,
     color: colors.primary,
     fontWeight: '500',
+  },
+  routeDisplayValue: {
+    fontSize: 18,
+    color: colors.primary,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

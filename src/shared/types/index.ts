@@ -56,3 +56,24 @@ export interface ApiResponse<T> {
   data: T;
   message: string;
 }
+
+export interface BagStats {
+  allocated_bags: number;
+  used_bags: number;
+  available_bags: number;
+}
+
+export interface BagTransfer {
+  id: string;
+  from_driver_id: string;
+  to_driver_id: string;
+  organization_id: string;
+  number_of_bags: number;
+  status: 'pending' | 'completed' | 'expired';
+  notes?: string;
+  created_at: string;
+  completed_at?: string;
+  otp_expires_at?: string;
+  from_driver?: { id: string; name: string };
+  to_driver?: { id: string; name: string };
+}

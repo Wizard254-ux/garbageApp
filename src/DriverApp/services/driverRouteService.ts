@@ -5,7 +5,7 @@ export const driverRouteService = {
   ...apiService,
   
   getDriverRoutes: () => {
-    console.log('driverRouteService: Calling manageRoutes');
-    return apiService.manageRoutes({ action: 'read' });
+    console.log('driverRouteService: Calling driver routes endpoint');
+    return apiService.get('/driver/routes');
   }
 };

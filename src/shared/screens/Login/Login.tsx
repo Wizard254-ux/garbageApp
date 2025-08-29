@@ -27,8 +27,9 @@ export const Login: React.FC = () => {
       const response = await apiService.login({ email, password });
       console.log('API login successful:', response.data);
 
-      const { token, user: userData } = response.data;
-      console.log('Storing token and user data...');
+      const { data } = response.data;
+      const { access_token: token, user: userData } = data;
+      console.log('Storing token and user data...', { token, userData });
 
       await Promise.all([
         AsyncStorage.setItem('accessToken', token),

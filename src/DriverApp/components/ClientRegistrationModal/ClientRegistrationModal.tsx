@@ -17,7 +17,7 @@ import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../shared/context/ThemeContext';
 import { apiService } from '../../../shared/api/axios';
-import { useRoutes } from '../../hooks/useRoutes';
+
 
 interface ClientRegistrationModalProps {
   visible: boolean;
@@ -36,7 +36,8 @@ export const ClientRegistrationModal: React.FC<ClientRegistrationModalProps> = (
   const [searchQuery, setSearchQuery] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const { routes, fetchRoutes } = useRoutes();
+  const [routes, setRoutes] = useState<any[]>([]);
+  const [routesLoading, setRoutesLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -110,12 +111,32 @@ export const ClientRegistrationModal: React.FC<ClientRegistrationModalProps> = (
     { value: 'commercial', label: 'Commercial' },
   ];
 
-  // Fetch routes when modal opens
-  useEffect(() => {
-    if (visible) {
-      fetchRoutes();
+  const [routesLoaded, setRoutesLoaded] = useState(false);
+
+  const handleLoadRoutes = async () => {
+    if (!routesLoaded) {
+      setRoutesLoading(true);
+      try {
+        console.log('Fetching routes for client registration...');
+        const response = await apiService.get('/organization/routes?page=1&limit=50');
+        console.log('Routes response:', response.data);
+        if (response.data?.status) {
+          const routesData = response.data.data.data || [];
+          setRoutes(routesData);
+          setRoutesLoaded(true);
+        }
+      } catch (error) {
+        console.error('Failed to fetch routes:', error);
+        Alert.alert('Error', 'Failed to load routes. Please try again.');
+      } finally {
+        setRoutesLoading(false);
+      }
     }
-  }, [visible]);
+  };
+
+  const handleRouteSearch = (text: string) => {
+    setSearchQuery(text);
+  };
 
   const resetForm = () => {
     setFormData({
@@ -285,27 +306,42 @@ export const ClientRegistrationModal: React.FC<ClientRegistrationModalProps> = (
             <View style={styles.formGroup}>
               <Text style={styles.label}>Route *</Text>
               
-              {/* Search Bar */}
-              <View style={styles.searchContainer}>
-                <Ionicons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
-                <TextInput
-                  style={styles.searchInput}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholder="Search routes..."
-                  placeholderTextColor={colors.textSecondary}
-                  editable={!loading}
-                />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                    <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                )}
-              </View>
+
 
               {/* Route Selection */}
               <View style={styles.routeSelectionContainer}>
-                {filteredRoutes && filteredRoutes.length > 0 ? (
+                {!routesLoaded ? (
+                  <TouchableOpacity 
+                    style={styles.loadRoutesButton}
+                    onPress={handleLoadRoutes}
+                    disabled={loading || routesLoading}
+                  >
+                    <Ionicons name="location-outline" size={24} color={colors.primary} />
+                    <Text style={styles.loadRoutesText}>
+                      {routesLoading ? 'Loading routes...' : 'Tap to load routes'}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                  {/* Search Bar - only show when routes are loaded */}
+                  <View style={styles.searchContainer}>
+                    <Ionicons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
+                    <TextInput
+                      style={styles.searchInput}
+                      value={searchQuery}
+                      onChangeText={handleRouteSearch}
+                      placeholder="Search routes..."
+                      placeholderTextColor={colors.textSecondary}
+                      editable={!loading}
+                    />
+                    {searchQuery.length > 0 && (
+                      <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                        <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  
+                  {filteredRoutes && filteredRoutes.length > 0 ? (
                   <ScrollView style={styles.routeList} nestedScrollEnabled>
                     {filteredRoutes.map((route) => (
                       <TouchableOpacity
@@ -344,6 +380,7 @@ export const ClientRegistrationModal: React.FC<ClientRegistrationModalProps> = (
                       {searchQuery ? 'No routes match your search' : 'No routes available'}
                     </Text>
                   </View>
+                  )}
                 )}
               </View>
             </View>
@@ -758,6 +795,18 @@ const createStyles = (colors: any) =>
     calendarCloseText: {
       fontSize: 16,
       color: colors.text,
+      fontWeight: '600',
+    },
+    loadRoutesButton: {
+      padding: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: 8,
+    },
+    loadRoutesText: {
+      fontSize: 16,
+      color: colors.primary,
       fontWeight: '600',
     },
     closeButton: {

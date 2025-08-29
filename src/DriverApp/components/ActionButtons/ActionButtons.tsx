@@ -12,21 +12,17 @@ interface ActionButton {
 }
 
 interface ActionButtonsProps {
-  onCompletePickup?: () => void;
-  onViewPending?: () => void;
   onRegisterClient?: () => void;
   onSelectRoute?: () => void;
-  totalRoutes?: number;
-  pendingPickups?: number;
+  activeRoute?: string;
+  availablePickups?: number;
 }
 
 export const ActionButtons: React.FC<ActionButtonsProps> = ({
-  onCompletePickup,
-  onViewPending,
   onRegisterClient,
   onSelectRoute,
-  totalRoutes = 0,
-  pendingPickups = 0
+  activeRoute = "No active route",
+  availablePickups = 0
 }) => {
   const { colors } = useTheme();
   const styles = createStyles(colors);
@@ -52,22 +48,8 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
 
   const buttons: ActionButton[] = [
     {
-      id: 'complete-pickup',
-      title: 'COMPLETE PICKUP',
-      icon: 'checkmark-circle',
-      color: '#3B82F6',
-      onPress: onCompletePickup || (() => {})
-    },
-    {
-      id: 'view-pending',
-      title: 'VIEW PENDING',
-      icon: 'time',
-      color: '#F59E0B',
-      onPress: onViewPending || (() => {})
-    },
-    {
       id: 'select-route',
-      title: 'SELECT ROUTE',
+      title: 'ROUTE',
       icon: 'navigate',
       color: '#10B981',
       onPress: onSelectRoute || (() => {})
@@ -83,21 +65,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Week Indicator */}
-      <View style={styles.weekIndicator}>
-        <View style={styles.weekHeader}>
-          <Ionicons name="calendar-outline" size={20} color={colors.primary} />
-          <Text style={styles.weekTitle}>Available Pickups</Text>
-        </View>
-        <View style={styles.weekInfo}>
-          <Text style={styles.weekRange}>Week {weekInfo.weekNumber}</Text>
-          <Text style={styles.weekDates}>{weekInfo.weekRange}</Text>
-        </View>
-        <View style={styles.pickupCount}>
-          <Text style={styles.pickupCountNumber}>{pendingPickups}</Text>
-          <Text style={styles.pickupCountLabel}>Pending</Text>
-        </View>
-      </View>
+
       
       <View style={styles.grid}>
         {buttons.map((button) => (
@@ -109,11 +77,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
           >
             <View style={[styles.button, { backgroundColor: button.color }]}>
               <Ionicons name={button.icon as any} size={32} color="white" />
-              {button.id === 'select-route' && totalRoutes > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{totalRoutes}</Text>
-                </View>
-              )}
+
             </View>
             <Text style={styles.buttonLabel}>{button.title}</Text>
           </TouchableOpacity>
@@ -128,7 +92,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 24,
   },
-  weekIndicator: {
+  routeIndicator: {
     backgroundColor: colors.cardBackground,
     borderRadius: 12,
     padding: 16,
@@ -142,30 +106,26 @@ const createStyles = (colors: any) => StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  weekHeader: {
+  routeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     flex: 1,
   },
-  weekTitle: {
+  routeTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.text,
   },
-  weekInfo: {
+  routeInfo: {
     alignItems: 'center',
-    flex: 1,
+    flex: 2,
   },
-  weekRange: {
+  routeName: {
     fontSize: 14,
     fontWeight: '600',
     color: colors.primary,
-  },
-  weekDates: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
+    textAlign: 'center',
   },
   pickupCount: {
     alignItems: 'center',

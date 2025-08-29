@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Modal, Text, TextInput, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, RefreshControl } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../shared/context/ThemeContext';
-import { useDriverStats } from '../../hooks/useDriverStats';
-import { usePickupOperations } from '../../hooks/usePickupOperations';
-import { useRoutes } from '../../hooks/useRoutes';
+
 import { apiService } from '../../../shared/api/axios';
 
 // Import new components
@@ -13,23 +11,25 @@ import { ModernHeader } from '../../components/ModernHeader/ModernHeader';
 import { StatusCard } from '../../components/StatusCard/StatusCard';
 import { ActionButtons } from '../../components/ActionButtons/ActionButtons';
 import { StatisticsCards } from '../../components/StatisticsCards/StatisticsCards';
-import { PromotionalCards } from '../../components/PromotionalCards/PromotionalCards';
-import { ClientRegistrationModal } from '../../components/ClientRegistrationModal/ClientRegistrationModal';
 
-export const ModernDashboard: React.FC = () => {
+import { BagStatsCard } from '../../components/BagStatsCard/BagStatsCard';
+
+
+interface ModernDashboardProps {
+  onRegisterClient?: () => void;
+  onSelectRoute?: () => void;
+}
+
+export const ModernDashboard: React.FC<ModernDashboardProps> = ({ onRegisterClient, onSelectRoute }) => {
   const { colors } = useTheme();
   const navigation = useNavigation();
-  const { stats, loading, error, fetchStats } = useDriverStats();
-  const { 
-    loading: pickupLoading, 
-    users, 
-    markPickupCompleted, 
-    fetchUsersByStatus 
-  } = usePickupOperations();
-  const { routes, fetchRoutes } = useRoutes();
+  const [activeRoute, setActiveRoute] = useState('No active route');
+  const [bagStats, setBagStats] = useState(null);
+
 
   const [refreshing, setRefreshing] = useState(false);
-  const [showClientRegistration, setShowClientRegistration] = useState(false);
+
+
 
   useEffect(() => {
     loadDashboardData();
@@ -38,12 +38,18 @@ export const ModernDashboard: React.FC = () => {
   const loadDashboardData = async () => {
     try {
       setRefreshing(true);
-      // Single optimized call instead of 6 separate calls
-      await fetchStats();
-      // Routes are already included in stats, no need for separate call
+      const response = await apiService.get('/driver/dashboard/stats');
+      
+      if (response.data?.status) {
+        const { active_route, bag_stats } = response.data.data;
+        setActiveRoute(active_route?.name || 'No active route');
+        setBagStats(bag_stats);
+      }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       Alert.alert('Error', 'Failed to load dashboard data. Please try again.');
+      setActiveRoute('No active route');
+      setBagStats({ allocated_bags: 0, used_bags: 0, available_bags: 0 });
     } finally {
       setRefreshing(false);
     }
@@ -73,20 +79,17 @@ export const ModernDashboard: React.FC = () => {
 
 
 
-  const handleSeeAllStats = () => {
-    Alert.alert('Statistics', 'Detailed statistics view will open here');
-  };
 
-  const handlePromoCardPress = (cardId: string) => {
-    Alert.alert('Information', `Opening ${cardId} details`);
-  };
+
+
 
   const handleRegisterClient = () => {
-    setShowClientRegistration(true);
+    onRegisterClient?.();
   };
 
   const handleSelectRoute = () => {
-    navigation.navigate('Pickups' as never, { openRouteFilter: true } as never);
+    console.log('Route button clicked');
+    onSelectRoute?.();
   };
 
 
@@ -114,41 +117,32 @@ export const ModernDashboard: React.FC = () => {
       >
         <StatusCard 
           driverStatus="active"
-          activeRoute={stats?.activeRoute || "No active route"}
-          loading={loading}
+          activeRoute={activeRoute}
+          loading={refreshing}
+          showActiveRoute={true}
+        />
+        
+        <BagStatsCard
+          allocated={bagStats?.allocated_bags || 0}
+          used={bagStats?.used_bags || 0}
+          available={bagStats?.available_bags || 0}
+          onTransferPress={() => navigation.navigate('Bags' as never)}
+          loading={refreshing}
         />
         
         <ActionButtons
-          onCompletePickup={handleCompletePickup}
-          onViewPending={handleViewPending}
           onRegisterClient={handleRegisterClient}
           onSelectRoute={handleSelectRoute}
-          totalRoutes={stats?.totalRoutes || 0}
-          pendingPickups={stats?.pendingPickups || 0}
+          activeRoute={activeRoute}
+          availablePickups={0}
         />
         
-        <StatisticsCards
-          completedPickups={stats?.completedPickups || 0}
-          pendingPickups={stats?.pendingPickups || 0}
-          todayPickups={stats?.todayPickups || 0}
-          totalRoutes={stats?.totalRoutes || 0}
-          onSeeAll={handleSeeAllStats}
-        />
+
         
-        <PromotionalCards 
-          onCardPress={handlePromoCardPress}
-        />
+
       </ScrollView>
       
-      {/* Client Registration Modal */}
-      <ClientRegistrationModal
-        visible={showClientRegistration}
-        onClose={() => setShowClientRegistration(false)}
-        onSuccess={() => {
-          // Optionally refresh dashboard data
-          loadDashboardData();
-        }}
-      />
+
     </View>
   );
 };

@@ -15,8 +15,8 @@ export const useRouteActivation = () => {
   const fetchActiveRoute = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getActiveRoute();
-      setActiveRoute(response.data.data);
+      const response = await apiService.get('/driver/routes/active');
+      setActiveRoute(response.data.data?.route);
       setError(null);
     } catch (err: any) {
       console.error('Error fetching active route:', err);
@@ -30,8 +30,8 @@ export const useRouteActivation = () => {
   const activateRoute = async (routeId: string) => {
     try {
       setLoading(true);
-      const response = await apiService.activateDriverOnRoute(routeId);
-      setActiveRoute(response.data.data);
+      const response = await apiService.post('/driver/routes/activate', { route_id: routeId });
+      await fetchActiveRoute();
       setError(null);
       Alert.alert('Success', response.data.message || 'Route activated successfully');
       return true;
@@ -54,7 +54,7 @@ export const useRouteActivation = () => {
   const deactivateRoute = async (routeId: string) => {
     try {
       setLoading(true);
-      const response = await apiService.deactivateDriverFromRoute(routeId);
+      const response = await apiService.post('/driver/routes/deactivate', { route_id: routeId });
       setActiveRoute(null);
       setError(null);
       Alert.alert('Success', response.data.message || 'Route deactivated successfully');

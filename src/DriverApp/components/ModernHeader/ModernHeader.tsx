@@ -26,18 +26,17 @@ export const ModernHeader: React.FC<ModernHeaderProps> = ({
   const styles = createStyles(colors);
 
   return (
-    <>
+    <View style={styles.container}>
       <StatusBar 
         barStyle={mode === 'dark' ? 'light-content' : 'dark-content'} 
         backgroundColor={colors.statusBarBackground || colors.background}
-        // translucent={Platform.OS === 'android'}
+        translucent={false}
       />
-      <View style={styles.statusBarSpacer} />
       <View style={styles.header}>
         <View style={styles.leftSection}>
           <View style={styles.greetingContainer}>
             <Text style={styles.greeting}>
-              {getGreeting()}, {user?.name?.toUpperCase() || 'DRIVER'} 👋
+              {getGreeting()}, {user?.name?.split(' ')[0]?.toUpperCase() || 'DRIVER'} 👋
             </Text>
           </View>
         </View>
@@ -68,22 +67,20 @@ export const ModernHeader: React.FC<ModernHeaderProps> = ({
           </TouchableOpacity>
         </View>
       </View>
-    </>
+    </View>
   );
 };
 
 const createStyles = (colors: any) => StyleSheet.create({
-  statusBarSpacer: {
-    height: Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 44,
-    backgroundColor: colors.statusBarBackground || colors.background,
+  container: {
+    backgroundColor: colors.headerBackground,
   },
+
   header: {
     backgroundColor: colors.headerBackground,
     paddingHorizontal: 20,
-    paddingTop: 10,
-    borderWidth:2,
-    borderRadius:3,
-    paddingBottom: 20,
+    paddingVertical: 12,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 44,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',

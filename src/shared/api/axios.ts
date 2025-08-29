@@ -4,10 +4,55 @@ import { AuthResponse, User, ApiResponse } from "../types";
 
 // API Configuration
 const api = axios.create({
-  baseURL: "http://192.168.1.189:3000",
-
-  timeout: 10000,
+  baseURL: "http://192.168.1.189:8000/api",
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  },
 });
+
+// Add request logging and FormData detection
+api.interceptors.request.use(
+  (config) => {
+    // Auto-detect FormData and remove Content-Type to let browser/RN set it
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+    
+    console.log('🚀 API Request:', {
+      method: config.method?.toUpperCase(),
+      url: config.baseURL + config.url,
+      data: config.data,
+    });
+    return config;
+  },
+  (error) => {
+    console.error('❌ Request Error:', error);
+    return Promise.reject(error);
+  }
+);
+
+// Add response logging
+api.interceptors.response.use(
+  (response) => {
+    console.log('✅ API Response:', {
+      status: response.status,
+      url: response.config.url,
+      data: response.data,
+    });
+    return response;
+  },
+  (error) => {
+    console.error('❌ API Error:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+      url: error.config?.url,
+    });
+    return Promise.reject(error);
+  }
+);
 // Auth token interceptor
 api.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem("accessToken");
@@ -26,7 +71,6 @@ api.interceptors.response.use(
       await AsyncStorage.removeItem("accessToken");
       await AsyncStorage.removeItem("user");
     }
-    console.log(error.response)
     return Promise.reject(error);
   }
 );
@@ -34,35 +78,40 @@ api.interceptors.response.use(
 // API Endpoints
 const ENDPOINTS = {
   AUTH: {
-    REGISTER: "/api/auth/register",
-    LOGIN: "/api/auth/login",
-    PROFILE: "/api/auth/profile",
-    CHANGE_PASSWORD: "/api/auth/change-password",
-    SEND_VERIFICATION: "/api/auth/send-verification-code",
-    REGISTER_ORGANIZATION: "/api/auth/register/organization",
-    REGISTER_DRIVER: "/api/auth/register/driver",
-    REGISTER_CLIENT: "/api/auth/register/client",
+    REGISTER: "/auth/register",
+    LOGIN: "/auth/login",
+    PROFILE: "/auth/user",
+    CHANGE_PASSWORD: "/auth/change-password",
+    SEND_VERIFICATION: "/auth/send-verification-code",
+    REGISTER_ORGANIZATION: "/auth/register/organization",
+    REGISTER_DRIVER: "/auth/register/driver",
+    REGISTER_CLIENT: "/auth/register/client",
   },
   ORGANIZATION: {
-    MANAGE: "/api/auth/organization/manage",
-    MANAGE_USERS: "/api/auth/organization/users/manage",
+    MANAGE: "/organization/manage",
+    MANAGE_USERS: "/organization/users/manage",
   },
   ROUTES: {
-    GET_ALL: "/api/routes",
-    ADDRESSES: "/api/auth/routes/addresses",
+    GET_ALL: "/driver/routes",
+    ADDRESSES: "/driver/routes/addresses",
   },
   PICKUPS: {
-    UPDATE_STATUS: (pickupId: string) => `/api/pickUps/${pickupId}`,
-    BATCH_MARK_UNPICKED: "/api/pickUps/batch-mark-unpicked",
-    GET_BY_ROUTE: (routeId: string) => `/api/pickUps/route/${routeId}`,
-    GET_ALL_UNPICKED: "/api/pickUps/all/unpicked",
-    GET_ALL_PICKED: "/api/pickUps/all/picked",
+    UPDATE_STATUS: (pickupId: string) => `/driver/pickups/${pickupId}`,
+    BATCH_MARK_UNPICKED: "/driver/pickups/batch-mark-unpicked",
+    GET_BY_ROUTE: (routeId: string) => `/driver/pickups/route/${routeId}`,
+    GET_ALL_UNPICKED: "/driver/pickups/all/unpicked",
+    GET_ALL_PICKED: "/driver/pickups/all/picked",
   },
   BAGS: {
-    DISTRIBUTE: "/api/bags/distribute",
-    VERIFY: "/api/bags/verify",
-    HISTORY: (clientId: string) => `/api/bags/history/${clientId}`,
-    CURRENT_WEEK: "/api/bags/current-week",
+    GET_STATS: "/driver/bags/stats",
+    GET_DRIVER_BAGS: "/driver/bags",
+    TRANSFER_INITIATE: "/driver/bags/transfer/initiate",
+    TRANSFER_COMPLETE: "/driver/bags/transfer/complete",
+    TRANSFER_HISTORY: "/driver/bags/transfer/history",
+    DISTRIBUTE: "/bags/distribute",
+    VERIFY: "/bags/verify",
+    HISTORY: (clientId: string) => `/bags/history/${clientId}`,
+    CURRENT_WEEK: "/bags/current-week",
   },
 };
 
@@ -104,7 +153,7 @@ export const apiService = {
     }),
 
   registerClientByDriver: (userData: FormData) =>
-    api.post<AuthResponse>("/api/auth/register/client-by-driver", userData, {
+    api.post<AuthResponse>("/auth/register/client-by-driver", userData, {
       headers: { "Content-Type": "multipart/form-data" },
     }),
 
@@ -215,10 +264,10 @@ export const apiService = {
   },
 
   // Driver specific methods
-  getDriverStats: () => api.get<ApiResponse<any>>("/api/driver/stats"),
+  getDriverStats: () => api.get<ApiResponse<any>>("/driver/stats"),
   
   // Optimized dashboard API - single call for all dashboard data
-  getDashboardData: () => api.get<ApiResponse<any>>("/api/driver/dashboard"),
+  getDashboardData: () => api.get<ApiResponse<any>>("/driver/dashboard"),
 
   // Bag distribution methods
   distributeBags: (data: {
@@ -256,6 +305,45 @@ export const apiService = {
     const params = new URLSearchParams();
     if (routeId) params.append('route_id', routeId);
     const queryString = params.toString() ? `?${params.toString()}` : '';
-    return api.get(`/api/bags/eligible-clients${queryString}`);
+    return api.get(`/bags/eligible-clients${queryString}`);
   },
+
+  // Driver bag management
+  getDriverBagStats: () => api.get(ENDPOINTS.BAGS.GET_STATS),
+  
+  getDriverBags: () => api.get(ENDPOINTS.BAGS.GET_DRIVER_BAGS),
+
+  // Bag transfer methods
+  initiateBagTransfer: (data: {
+    to_driver_id: string;
+    number_of_bags: number;
+    notes?: string;
+    contact?: string;
+  }) => api.post(ENDPOINTS.BAGS.TRANSFER_INITIATE, data),
+
+  completeBagTransfer: (data: {
+    transfer_id: string;
+    otp_code: string;
+  }) => api.post(ENDPOINTS.BAGS.TRANSFER_COMPLETE, data),
+
+  getBagTransferHistory: () => api.get(ENDPOINTS.BAGS.TRANSFER_HISTORY),
+
+  // Get organization drivers for transfer
+  getOrganizationDrivers: () => api.get('/driver/drivers'),
+
+  // History methods
+  getTodayPickups: () => {
+    const today = new Date().toISOString().split('T')[0];
+    return api.get(`/driver/pickups?date=${today}`);
+  },
+
+  getWeekPickups: () => {
+    return api.get('/driver/pickups?week=current');
+  },
+
+  // Generic HTTP methods
+  get: (url: string) => api.get(url),
+  post: (url: string, data?: any) => api.post(url, data),
+  put: (url: string, data?: any) => api.put(url, data),
+  delete: (url: string) => api.delete(url),
 };
