@@ -5,11 +5,27 @@ import { useTheme } from '../../../shared/context/ThemeContext';
 import { useBagManagement } from '../../hooks/useBagManagement';
 import { apiService } from '../../../shared/api/axios';
 
+interface Driver {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface Client {
+  id: string;
+  accountNumber: string;
+  user: {
+    name: string;
+    email: string;
+    phone?: string;
+  };
+}
+
 export const BagTransferScreen: React.FC = () => {
   const { colors } = useTheme();
   const { bagStats, transferHistory, initiateBagTransfer, completeBagTransfer, loading, fetchTransferHistory } = useBagManagement();
-  const [drivers, setDrivers] = useState([]);
-  const [filteredDrivers, setFilteredDrivers] = useState([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [filteredDrivers, setFilteredDrivers] = useState<Driver[]>([]);
   const [driverSearchTerm, setDriverSearchTerm] = useState('');
   const [loadingDrivers, setLoadingDrivers] = useState(false);
   const [refreshingDrivers, setRefreshingDrivers] = useState(false);
@@ -18,15 +34,15 @@ export const BagTransferScreen: React.FC = () => {
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showIssueBagsModal, setShowIssueBagsModal] = useState(false);
   const [showClientPicker, setShowClientPicker] = useState(false);
-  const [clients, setClients] = useState([]);
-  const [filteredClients, setFilteredClients] = useState([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [filteredClients, setFilteredClients] = useState<Client[]>([]);
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [loadingClients, setLoadingClients] = useState(false);
   const [refreshingClients, setRefreshingClients] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
-  const [selectedDriver, setSelectedDriver] = useState(null);
-  const [selectedClient, setSelectedClient] = useState(null);
+  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [transferForm, setTransferForm] = useState({
     number_of_bags: '',
     notes: '',
@@ -42,14 +58,18 @@ export const BagTransferScreen: React.FC = () => {
     number_of_bags: '',
     client_id: '',
     contact: '',
+    otp_method: 'email',
   });
-  const [pendingTransferId, setPendingTransferId] = useState(null);
+  const [pendingTransferId, setPendingTransferId] = useState<string | null>(null);
   const [issuingBags, setIssuingBags] = useState(false);
   const [showBagOtpModal, setShowBagOtpModal] = useState(false);
-  const [bagIssueId, setBagIssueId] = useState(null);
+  const [bagIssueId, setBagIssueId] = useState<string | null>(null);
   const [bagOtpCode, setBagOtpCode] = useState('');
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [transferHistoryCache, setTransferHistoryCache] = useState<any[]>([]);
+  const [lastCacheTime, setLastCacheTime] = useState<number>(0);
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 
   useEffect(() => {
     // Load bag stats on component mount
@@ -105,7 +125,7 @@ export const BagTransferScreen: React.FC = () => {
     }
   };
 
-  const handleDriverSearch = (text) => {
+  const handleDriverSearch = (text: string) => {
     setDriverSearchTerm(text);
     if (text.trim() === '') {
       setFilteredDrivers(drivers);
@@ -122,7 +142,7 @@ export const BagTransferScreen: React.FC = () => {
     try {
       setLoadingClients(true);
       console.log('Fetching clients...');
-      const response = await apiService.get('/driver/pickups/clients');
+      const response = await apiService.get('/driver/route/clients');
       console.log('Clients response:', response.data);
       if (response.data.status) {
         const clientsData = response.data.data?.clients || [];
@@ -133,7 +153,15 @@ export const BagTransferScreen: React.FC = () => {
     } catch (error: any) {
       console.error('Failed to fetch clients:', error);
       console.error('Error response:', error.response?.data);
-      Alert.alert('Error', error.response?.data?.message || 'Failed to load clients');
+      if (error.response?.status === 400 && error.response?.data?.error === 'No active route') {
+        Alert.alert(
+          'No Active Route', 
+          'You are not active on any route. Please activate a route first.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Error', error.response?.data?.message || 'Failed to load clients');
+      }
     } finally {
       setLoadingClients(false);
     }
@@ -142,7 +170,7 @@ export const BagTransferScreen: React.FC = () => {
   const handleRefreshClients = async () => {
     try {
       setRefreshingClients(true);
-      const response = await apiService.get('/driver/pickups/clients');
+      const response = await apiService.get('/driver/route/clients');
       if (response.data.status) {
         const clientsData = response.data.data?.clients || [];
         setClients(clientsData);
@@ -150,21 +178,51 @@ export const BagTransferScreen: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Failed to refresh clients:', error);
+      if (error.response?.status === 400 && error.response?.data?.error === 'No active route') {
+        Alert.alert(
+          'No Active Route', 
+          'You are not active on any route. Please activate a route first.',
+          [{ text: 'OK' }]
+        );
+      }
     } finally {
       setRefreshingClients(false);
+    }
+  };
+
+  const getCachedTransferHistory = async (forceRefresh = false) => {
+    const now = Date.now();
+    const isCacheValid = (now - lastCacheTime) < CACHE_DURATION;
+    
+    if (!forceRefresh && isCacheValid && transferHistoryCache.length > 0) {
+      console.log('Using cached transfer history');
+      return transferHistoryCache;
+    }
+    
+    console.log('Fetching fresh transfer history');
+    setLoadingHistory(true);
+    try {
+      await fetchTransferHistory();
+      const freshHistory = transferHistory;
+      setTransferHistoryCache(freshHistory);
+      setLastCacheTime(now);
+      return freshHistory;
+    } catch (error) {
+      console.error('Failed to fetch transfer history:', error);
+      return transferHistoryCache; // Return cached data on error
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      setLoadingHistory(true);
-      await fetchTransferHistory();
+      await getCachedTransferHistory(true); // Force refresh
     } catch (error) {
       console.error('Failed to refresh:', error);
     } finally {
       setRefreshing(false);
-      setLoadingHistory(false);
     }
   };
 
@@ -180,7 +238,6 @@ export const BagTransferScreen: React.FC = () => {
         to_driver_id: selectedDriver.id,
         number_of_bags: parseInt(transferForm.number_of_bags),
         notes: transferForm.notes,
-        contact: transferForm.contact,
       });
 
       setPendingTransferId(result.data.transfer_id);
@@ -205,14 +262,18 @@ export const BagTransferScreen: React.FC = () => {
     try {
       setCompletingTransfer(true);
       const result = await completeBagTransfer({
-        transfer_id: pendingTransferId,
+        transfer_id: pendingTransferId || '',
         otp_code: otpForm.otp_code,
       });
       Alert.alert('Success', 'Bag transfer completed successfully!');
       setOtpForm({ transfer_id: '', otp_code: '' });
       setShowOtpModal(false);
       setPendingTransferId(null);
-      fetchTransferHistory();
+      // Clear cache to force refresh on next load
+      setTransferHistoryCache([]);
+      setLastCacheTime(0);
+      await getCachedTransferHistory(true);
+      fetchBagStats(); // Refresh dashboard stats
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {
@@ -232,6 +293,7 @@ export const BagTransferScreen: React.FC = () => {
         client_id: selectedClient.id,
         number_of_bags: parseInt(issueBagsForm.number_of_bags),
         contact: issueBagsForm.contact,
+        otp_method: issueBagsForm.otp_method,
       });
       
       if (response.data.status) {
@@ -246,7 +308,7 @@ export const BagTransferScreen: React.FC = () => {
     }
   };
 
-  const renderDriverItem = ({ item, index }) => (
+  const renderDriverItem = ({ item, index }: { item: Driver; index: number }) => (
     <TouchableOpacity
       style={[styles.driverItem, { borderColor: colors.border }]}
       onPress={() => {
@@ -267,7 +329,7 @@ export const BagTransferScreen: React.FC = () => {
     </TouchableOpacity>
   );
 
-  const handleClientSearch = (text) => {
+  const handleClientSearch = (text: string) => {
     setClientSearchTerm(text);
     if (text.trim() === '') {
       setFilteredClients(clients);
@@ -299,8 +361,9 @@ export const BagTransferScreen: React.FC = () => {
         setShowSuccessModal(true);
         setBagOtpCode('');
         setBagIssueId(null);
-        setIssueBagsForm({ number_of_bags: '', client_id: '', contact: '' });
+        setIssueBagsForm({ number_of_bags: '', client_id: '', contact: '', otp_method: 'email' });
         setSelectedClient(null);
+        fetchBagStats(); // Refresh dashboard stats
       }
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.message || 'Invalid OTP');
@@ -309,12 +372,13 @@ export const BagTransferScreen: React.FC = () => {
     }
   };
 
-  const renderClientItem = ({ item, index }) => (
+  const renderClientItem = ({ item, index }: { item: Client; index: number }) => (
     <TouchableOpacity
       style={[styles.clientItem, { borderColor: colors.border }]}
       onPress={() => {
         setSelectedClient(item);
-        setIssueBagsForm(prev => ({ ...prev, contact: item.user?.email || '' }));
+        const contact = issueBagsForm.otp_method === 'email' ? item.user?.email || '' : item.user?.phone || '';
+        setIssueBagsForm(prev => ({ ...prev, contact }));
         setShowClientPicker(false);
         setClientSearchTerm('');
         setFilteredClients(clients);
@@ -374,14 +438,10 @@ export const BagTransferScreen: React.FC = () => {
 
           <View style={styles.historyHeaderContainer}>
             <Text style={[styles.cardTitle, { color: colors.text }]}>Transfer History</Text>
-            {transferHistory.length === 0 && !loadingHistory && (
+            {(transferHistory.length === 0 && transferHistoryCache.length === 0) && !loadingHistory && (
               <TouchableOpacity 
                 style={[styles.loadHistoryButton, { backgroundColor: colors.primary }]}
-                onPress={async () => {
-                  setLoadingHistory(true);
-                  await fetchTransferHistory();
-                  setLoadingHistory(false);
-                }}
+                onPress={() => getCachedTransferHistory()}
               >
                 <Text style={styles.loadHistoryText}>Load History</Text>
               </TouchableOpacity>
@@ -391,10 +451,10 @@ export const BagTransferScreen: React.FC = () => {
             <View style={styles.loadingContainer}>
               <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Fetching history...</Text>
             </View>
-          ) : transferHistory.length === 0 ? (
+          ) : (transferHistory.length === 0 && transferHistoryCache.length === 0) ? (
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No transfers yet</Text>
           ) : (
-            transferHistory.slice(0, 5).map((transfer) => (
+            (transferHistory.length > 0 ? transferHistory : transferHistoryCache).slice(0, 5).map((transfer) => (
               <View key={transfer.id} style={[styles.historyItem, { borderBottomColor: colors.border }]}>
                 <View style={styles.historyHeader}>
                   <Text style={[styles.historyTitle, { color: colors.text }]}>
@@ -409,7 +469,7 @@ export const BagTransferScreen: React.FC = () => {
                   </Text>
                 </View>
                 <Text style={[styles.historyDetail, { color: colors.textSecondary }]}>
-                  {transfer.number_of_bags} bags • {new Date(transfer.created_at).toLocaleDateString()}
+                  {transfer.number_of_bags} bags • {transfer.completed_at ? new Date(transfer.completed_at).toLocaleString() : new Date(transfer.created_at).toLocaleString()}
                 </Text>
               </View>
             ))
@@ -586,13 +646,47 @@ export const BagTransferScreen: React.FC = () => {
               keyboardType="numeric"
             />
             
+            <View style={styles.otpMethodContainer}>
+              <Text style={[styles.otpMethodLabel, { color: colors.text }]}>OTP Method:</Text>
+              <View style={styles.otpMethodButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.otpMethodButton,
+                    { 
+                      backgroundColor: issueBagsForm.otp_method === 'email' ? colors.primary : colors.border,
+                      borderColor: colors.border 
+                    }
+                  ]}
+                  onPress={() => {
+                    setIssueBagsForm(prev => ({ ...prev, otp_method: 'email', contact: selectedClient?.user?.email || '' }));
+                  }}
+                >
+                  <Text style={[styles.otpMethodText, { color: issueBagsForm.otp_method === 'email' ? 'white' : colors.text }]}>Email</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.otpMethodButton,
+                    { 
+                      backgroundColor: issueBagsForm.otp_method === 'sms' ? colors.primary : colors.border,
+                      borderColor: colors.border 
+                    }
+                  ]}
+                  onPress={() => {
+                    setIssueBagsForm(prev => ({ ...prev, otp_method: 'sms', contact: selectedClient?.user?.phone || '' }));
+                  }}
+                >
+                  <Text style={[styles.otpMethodText, { color: issueBagsForm.otp_method === 'sms' ? 'white' : colors.text }]}>SMS</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
             <TextInput
               style={[styles.input, { borderColor: colors.border, color: colors.text }]}
-              placeholder="Contact (Email for OTP)"
+              placeholder={issueBagsForm.otp_method === 'email' ? 'Email for OTP' : 'Phone Number for OTP'}
               placeholderTextColor={colors.textSecondary}
               value={issueBagsForm.contact}
               onChangeText={(text) => setIssueBagsForm(prev => ({ ...prev, contact: text }))}
-              keyboardType="email-address"
+              keyboardType={issueBagsForm.otp_method === 'email' ? 'email-address' : 'phone-pad'}
               autoCapitalize="none"
             />
             
@@ -1103,5 +1197,29 @@ const createStyles = (colors: any) => StyleSheet.create({
     right: 16,
     padding: 4,
     zIndex: 1,
+  },
+  otpMethodContainer: {
+    marginBottom: 12,
+  },
+  otpMethodLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  otpMethodButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  otpMethodButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  otpMethodText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

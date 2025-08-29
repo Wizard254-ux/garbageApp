@@ -7,7 +7,32 @@ interface ThemeContextType {
   mode: ThemeMode;
   toggleTheme: () => void;
   colors: typeof lightColors;
+  typography: typeof typography;
+  spacing: typeof spacing;
+  borderRadius: typeof borderRadius;
 }
+
+const typography = {
+  h1: { fontSize: 24, fontWeight: 'bold' as const },
+  h2: { fontSize: 20, fontWeight: 'bold' as const },
+  h3: { fontSize: 18, fontWeight: '600' as const },
+  body: { fontSize: 16, fontWeight: 'normal' as const },
+  caption: { fontSize: 14, fontWeight: 'normal' as const },
+};
+
+const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 16,
+  lg: 24,
+  xl: 32,
+};
+
+const borderRadius = {
+  sm: 4,
+  md: 8,
+  lg: 12,
+};
 
 const lightColors = {
   primary: '#10B981',
@@ -94,6 +119,9 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     mode,
     toggleTheme,
     colors,
+    typography,
+    spacing,
+    borderRadius,
   };
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

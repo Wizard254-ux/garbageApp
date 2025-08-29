@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { TextInput, Text, View, StyleSheet, TouchableOpacity } from 'react-native';
-import { theme } from '../../styles/theme';
+import { useTheme } from '../../context/ThemeContext';
 
 interface InputProps {
   label?: string;
@@ -27,6 +27,58 @@ export const Input: React.FC<InputProps> = ({
 }) => {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const isPassword = secureTextEntry || showPasswordToggle;
+  const { colors, typography, spacing, borderRadius } = useTheme();
+  
+  const styles = StyleSheet.create({
+    container: {
+      marginBottom: spacing.md,
+    },
+    label: {
+      ...typography.body,
+      color: colors.text,
+      marginBottom: spacing.xs,
+      fontWeight: '600',
+    },
+    inputContainer: {
+      position: 'relative',
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: borderRadius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      fontSize: 16,
+      color: colors.text,
+      backgroundColor: colors.background,
+    },
+    passwordInput: {
+      paddingRight: 50,
+    },
+    inputError: {
+      borderColor: colors.error,
+    },
+    multiline: {
+      minHeight: 80,
+      textAlignVertical: 'top',
+    },
+    eyeButton: {
+      position: 'absolute',
+      right: spacing.md,
+      top: '50%',
+      transform: [{ translateY: -12 }],
+    },
+    eyeText: {
+      fontSize: 12,
+      color: colors.primary,
+      fontWeight: '600',
+    },
+    errorText: {
+      ...typography.caption,
+      color: colors.error,
+      marginTop: spacing.xs,
+    },
+  });
 
   return (
     <View style={styles.container}>
@@ -45,7 +97,7 @@ export const Input: React.FC<InputProps> = ({
           secureTextEntry={isPassword && !isPasswordVisible}
           multiline={multiline}
           keyboardType={keyboardType}
-          placeholderTextColor={theme.colors.textSecondary}
+          placeholderTextColor={colors.textSecondary}
         />
         {isPassword && (
           <TouchableOpacity
@@ -61,53 +113,3 @@ export const Input: React.FC<InputProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: theme.spacing.md,
-  },
-  label: {
-    ...theme.typography.body,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
-    fontWeight: '600',
-  },
-  inputContainer: {
-    position: 'relative',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.md,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    fontSize: 16,
-    color: theme.colors.text,
-    backgroundColor: theme.colors.background,
-  },
-  passwordInput: {
-    paddingRight: 50,
-  },
-  inputError: {
-    borderColor: theme.colors.error,
-  },
-  multiline: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  eyeButton: {
-    position: 'absolute',
-    right: theme.spacing.md,
-    top: '50%',
-    transform: [{ translateY: -12 }],
-  },
-  eyeText: {
-    fontSize: 12,
-    color: theme.colors.primary,
-    fontWeight: '600',
-  },
-  errorText: {
-    ...theme.typography.caption,
-    color: theme.colors.error,
-    marginTop: theme.spacing.xs,
-  },
-});

@@ -49,6 +49,10 @@ export interface PickupRecord {
 export interface AuthResponse {
   token: string;
   user: User;
+  data?: {
+    access_token: string;
+    user: User;
+  };
 }
 
 export interface ApiResponse<T> {

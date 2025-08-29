@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Alert, StatusBar, SafeAreaView, ScrollView, Dimensions } from 'react-native';
 import { Button, Input } from '../../components';
 import { useAuth } from '../../context/AuthContext';
-import { theme } from '../../styles/theme';
+import { useTheme } from '../../context/ThemeContext';
 import { apiService } from '../../api/axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -27,9 +27,12 @@ export const Login: React.FC = () => {
       const response = await apiService.login({ email, password });
       console.log('API login successful:', response.data);
 
-      const { data } = response.data;
-      const { access_token: token, user: userData } = data;
+      const { token, user: userData } = response.data;
       console.log('Storing token and user data...', { token, userData });
+
+      if (!token) {
+        throw new Error('No token received from server');
+      }
 
       await Promise.all([
         AsyncStorage.setItem('accessToken', token),
@@ -92,7 +95,6 @@ export const Login: React.FC = () => {
                 onChangeText={setEmail}
                 placeholder="Enter your email"
                 keyboardType="email-address"
-                style={styles.input}
               />
             </View>
 
@@ -104,7 +106,6 @@ export const Login: React.FC = () => {
                 placeholder="Enter your password"
                 secureTextEntry
                 showPasswordToggle
-                style={styles.input}
               />
             </View>
 
@@ -113,7 +114,6 @@ export const Login: React.FC = () => {
                 title="Sign In"
                 onPress={handleLogin}
                 loading={loading}
-                style={styles.loginButton}
               />
             </View>
 

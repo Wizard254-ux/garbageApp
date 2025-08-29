@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Platform, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../shared/context/AuthContext';
 import { useTheme } from '../../../shared/context/ThemeContext';
@@ -60,9 +60,16 @@ export const ModernHeader: React.FC<ModernHeaderProps> = ({
             onPress={onProfilePress}
           >
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {user?.name?.charAt(0)?.toUpperCase() || 'D'}
-              </Text>
+              {user && 'profile_image' in user && user.profile_image ? (
+                <Image 
+                  source={{ uri: user.profile_image as string }} 
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <Text style={styles.avatarText}>
+                  {user?.name?.charAt(0)?.toUpperCase() || 'D'}
+                </Text>
+              )}
             </View>
           </TouchableOpacity>
         </View>
@@ -138,10 +145,16 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   avatarText: {
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  avatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
 });

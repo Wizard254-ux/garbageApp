@@ -10,10 +10,14 @@ import { apiService } from '../../../shared/api/axios';
 import { ModernHeader } from '../../components/ModernHeader/ModernHeader';
 import { StatusCard } from '../../components/StatusCard/StatusCard';
 import { ActionButtons } from '../../components/ActionButtons/ActionButtons';
-import { StatisticsCards } from '../../components/StatisticsCards/StatisticsCards';
-
 import { BagStatsCard } from '../../components/BagStatsCard/BagStatsCard';
 
+
+interface BagStats {
+  allocated_bags: number;
+  used_bags: number;
+  available_bags: number;
+}
 
 interface ModernDashboardProps {
   onRegisterClient?: () => void;
@@ -24,7 +28,7 @@ export const ModernDashboard: React.FC<ModernDashboardProps> = ({ onRegisterClie
   const { colors } = useTheme();
   const navigation = useNavigation();
   const [activeRoute, setActiveRoute] = useState('No active route');
-  const [bagStats, setBagStats] = useState(null);
+  const [bagStats, setBagStats] = useState<BagStats | null>(null);
 
 
   const [refreshing, setRefreshing] = useState(false);
@@ -69,13 +73,7 @@ export const ModernDashboard: React.FC<ModernDashboardProps> = ({ onRegisterClie
 
 
 
-  const handleCompletePickup = () => {
-    navigation.navigate('Pickups' as never);
-  };
 
-  const handleViewPending = () => {
-    navigation.navigate('Pickups' as never);
-  };
 
 
 
@@ -88,7 +86,6 @@ export const ModernDashboard: React.FC<ModernDashboardProps> = ({ onRegisterClie
   };
 
   const handleSelectRoute = () => {
-    console.log('Route button clicked');
     onSelectRoute?.();
   };
 

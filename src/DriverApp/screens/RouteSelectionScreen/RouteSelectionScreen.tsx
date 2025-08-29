@@ -6,9 +6,10 @@ import { useNavigation } from '@react-navigation/native';
 
 import { apiService } from '../../../shared/api/axios';
 
-// Global cache to prevent multiple API calls
-let routesCache: any[] | null = null;
+// Optimized cache with timestamp
+let routesCache: { data: any[] | null; timestamp: number } = { data: null, timestamp: 0 };
 let isLoading = false;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 
 interface RouteSelectionScreenProps {
@@ -29,7 +30,7 @@ export const RouteSelectionScreen: React.FC<RouteSelectionScreenProps> = ({ onCl
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [activating, setActivating] = useState(false);
-  const [currentDriverId, setCurrentDriverId] = useState<number>(45); // Hardcoded driver ID
+  const [currentDriverId, setCurrentDriverId] = useState<number | null>(null);
   const [searchText, setSearchText] = useState('');
   const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'empty', 'occupied'
   const [allRoutes, setAllRoutes] = useState<any[]>([]);
@@ -39,24 +40,43 @@ export const RouteSelectionScreen: React.FC<RouteSelectionScreenProps> = ({ onCl
   useEffect(() => {
     if (!hasLoadedRef.current) {
       hasLoadedRef.current = true;
-      fetchDriverRoutes();
-      // getCurrentDriverId(); // Remove automatic call
+      const initializeScreen = async () => {
+        await getCurrentDriverId();
+        await fetchDriverRoutes();
+      };
+      initializeScreen();
     }
   }, []);
 
   const getCurrentDriverId = async () => {
     try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      
+      // Try to get from AsyncStorage first
+      const cachedDriverId = await AsyncStorage.getItem('driverId');
+      if (cachedDriverId) {
+        setCurrentDriverId(parseInt(cachedDriverId));
+        return;
+      }
+      
+      // If not cached, fetch from API and cache it
       const response = await apiService.get('/auth/user');
-      setCurrentDriverId(response.data.id);
+      const driverId = response.data.id;
+      
+      // Cache the driver ID
+      await AsyncStorage.setItem('driverId', driverId.toString());
+      setCurrentDriverId(driverId);
     } catch (error) {
       console.error('Error getting current driver:', error);
     }
   };
 
   const fetchDriverRoutes = async (page = 1) => {
-    // Use cache if available
-    if (routesCache && page === 1) {
-      setRoutes(routesCache);
+    // Use cache if available and not expired
+    const now = Date.now();
+    if (routesCache.data && page === 1 && (now - routesCache.timestamp) < CACHE_DURATION) {
+      setAllRoutes(routesCache.data);
+      applyFiltersToRoutes(routesCache.data, searchText, filterStatus);
       setLoading(false);
       return;
     }
@@ -69,28 +89,30 @@ export const RouteSelectionScreen: React.FC<RouteSelectionScreenProps> = ({ onCl
         isLoading = true;
         setLoading(true);
       }
-      console.log('Fetching organization routes...');
       const response = await apiService.get(`/organization/routes?page=${page}&limit=20`);
-      console.log('Routes response:', response.data);
       if (response.data?.status) {
         const newRoutes = response.data.data.data || [];
         if (page === 1) {
-          routesCache = newRoutes; // Cache first page
+          routesCache = { data: newRoutes, timestamp: Date.now() }; // Cache with timestamp
         }
         if (page === 1) {
           setAllRoutes(newRoutes);
           // Apply filters immediately to new data
           applyFiltersToRoutes(newRoutes, searchText, filterStatus);
+          setLoading(false); // Ensure loading is set to false
         } else {
           const updatedRoutes = [...allRoutes, ...newRoutes];
           setAllRoutes(updatedRoutes);
           // Apply filters immediately to updated data
           applyFiltersToRoutes(updatedRoutes, searchText, filterStatus);
         }
-        console.log('Routes set:', newRoutes);
+
       }
     } catch (error) {
       console.error('Error fetching routes:', error);
+      if (page === 1) {
+        setLoading(false);
+      }
     } finally {
       if (page === 1) {
         isLoading = false;
@@ -101,7 +123,7 @@ export const RouteSelectionScreen: React.FC<RouteSelectionScreenProps> = ({ onCl
 
   const handleActivateRoute = (route: any) => {
     setSelectedRoute(route);
-    const isCurrentDriverActive = route.active_drivers?.some((driver: any) => driver.id === currentDriverId);
+    const isCurrentDriverActive = route.active_drivers?.some((driver: any) => driver.id == currentDriverId);
     if (isCurrentDriverActive) {
       setShowDeactivateModal(true);
     } else {
@@ -111,7 +133,7 @@ export const RouteSelectionScreen: React.FC<RouteSelectionScreenProps> = ({ onCl
 
   const getCurrentActiveRoute = () => {
     return allRoutes.find(route => 
-      route.active_drivers?.some((driver: any) => driver.id === currentDriverId)
+      route.active_drivers?.some((driver: any) => driver.id == currentDriverId)
     );
   };
 
@@ -157,7 +179,7 @@ export const RouteSelectionScreen: React.FC<RouteSelectionScreenProps> = ({ onCl
   const handleRefresh = async () => {
     setRefreshing(true);
     setShowMenu(null); // Close any open menus
-    routesCache = null;
+    routesCache = { data: null, timestamp: 0 };
     await fetchDriverRoutes(1);
     setRefreshing(false);
   };
@@ -170,11 +192,11 @@ export const RouteSelectionScreen: React.FC<RouteSelectionScreenProps> = ({ onCl
         
         // Update UI immediately - remove driver from previous route and add to new route
         const updatedRoutes = allRoutes.map(route => {
-          if (route.active_drivers?.some((driver: any) => driver.id === currentDriverId)) {
+          if (route.active_drivers?.some((driver: any) => driver.id == currentDriverId)) {
             // Remove driver from previous route
             return {
               ...route,
-              active_drivers: route.active_drivers.filter((driver: any) => driver.id !== currentDriverId)
+              active_drivers: route.active_drivers.filter((driver: any) => driver.id != currentDriverId)
             };
           } else if (route.id === selectedRoute.id) {
             // Add driver to new route
@@ -216,7 +238,7 @@ export const RouteSelectionScreen: React.FC<RouteSelectionScreenProps> = ({ onCl
           if (route.id === selectedRoute.id) {
             return {
               ...route,
-              active_drivers: route.active_drivers?.filter((driver: any) => driver.id !== currentDriverId) || []
+              active_drivers: route.active_drivers?.filter((driver: any) => driver.id != currentDriverId) || []
             };
           }
           return route;
@@ -243,7 +265,9 @@ export const RouteSelectionScreen: React.FC<RouteSelectionScreenProps> = ({ onCl
 
   const renderRouteItem = ({ item }: { item: any }) => {
     const isOccupied = item.active_drivers && item.active_drivers.length > 0;
-    const isCurrentDriverActive = item.active_drivers?.some((driver: any) => driver.id === currentDriverId);
+    const isCurrentDriverActive = item.active_drivers?.some((driver: any) => {
+      return driver.id == currentDriverId;
+    });
     
     return (
       <View style={[styles.routeCard, { backgroundColor: colors.surface }, isCurrentDriverActive && { borderColor: colors.primary, borderWidth: 2 }]}>
@@ -424,14 +448,22 @@ export const RouteSelectionScreen: React.FC<RouteSelectionScreenProps> = ({ onCl
                 }
               }}
             >
-              <Ionicons 
-                name={allRoutes.find(r => r.id === showMenu)?.active_drivers?.some((driver: any) => driver.id === currentDriverId) ? 'remove-circle-outline' : 'add-circle-outline'} 
-                size={18} 
-                color={allRoutes.find(r => r.id === showMenu)?.active_drivers?.some((driver: any) => driver.id === currentDriverId) ? colors.error : colors.success} 
-              />
-              <Text style={[styles.menuOptionText, { color: colors.text, marginLeft: 8 }]}>
-                {allRoutes.find(r => r.id === showMenu)?.active_drivers?.some((driver: any) => driver.id === currentDriverId) ? 'Deactivate' : 'Activate'}
-              </Text>
+              {(() => {
+                const route = allRoutes.find(r => r.id === showMenu);
+                const isActive = route?.active_drivers?.some((driver: any) => driver.id == currentDriverId);
+                return (
+                  <>
+                    <Ionicons 
+                      name={isActive ? 'remove-circle-outline' : 'add-circle-outline'} 
+                      size={18} 
+                      color={isActive ? colors.error : colors.success} 
+                    />
+                    <Text style={[styles.menuOptionText, { color: colors.text, marginLeft: 8 }]}>
+                      {isActive ? 'Deactivate' : 'Activate'}
+                    </Text>
+                  </>
+                );
+              })()} 
             </TouchableOpacity>
             
             <TouchableOpacity
@@ -582,9 +614,9 @@ export const RouteSelectionScreen: React.FC<RouteSelectionScreenProps> = ({ onCl
               {selectedRoute?.active_drivers && selectedRoute.active_drivers.length > 0 ? (
                 selectedRoute.active_drivers.map((driver: any, index: number) => (
                   <View key={index} style={styles.driverItem}>
-                    <View style={[styles.driverDot, { backgroundColor: driver.id === currentDriverId ? colors.primary : colors.textSecondary }]} />
-                    <Text style={[styles.detailValue, { color: driver.id === currentDriverId ? colors.primary : colors.text }]}>
-                      {driver.name} {driver.id === currentDriverId ? '(You)' : ''}
+                    <View style={[styles.driverDot, { backgroundColor: driver.id == currentDriverId ? colors.primary : colors.textSecondary }]} />
+                    <Text style={[styles.detailValue, { color: driver.id == currentDriverId ? colors.primary : colors.text }]}>
+                      {driver.name} {driver.id == currentDriverId ? '(You)' : ''}
                     </Text>
                   </View>
                 ))
@@ -609,7 +641,7 @@ export const RouteSelectionScreen: React.FC<RouteSelectionScreenProps> = ({ onCl
 const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.headerBackground,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -645,7 +677,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
-    zIndex: 1,
   },
   routeHeader: {
     flexDirection: 'row',
@@ -716,14 +747,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 15,
-    zIndex: 10000,
+    elevation: 5,
+    zIndex: 1000,
     minWidth: 160,
     backgroundColor: 'white',
-  },
-  menuContainer: {
-    position: 'relative',
-    zIndex: 1000,
   },
   menuOverlay: {
     position: 'absolute',
@@ -732,6 +759,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 999,
+    backgroundColor: 'transparent',
   },
   menuOption: {
     flexDirection: 'row',

@@ -2,10 +2,19 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, Image, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../../shared/context/AuthContext';
 import { useTheme } from '../../../shared/context/ThemeContext';
 import { apiService } from '../../../shared/api/axios';
 import { ModernHeader } from '../../components/ModernHeader/ModernHeader';
+
+// Type definitions
+interface ApiResponse<T> {
+  status: boolean;
+  data?: T;
+  message?: string;
+}
 
 export const ProfileScreen: React.FC = () => {
   const { user, logout, updateUser } = useAuth();
@@ -16,8 +25,13 @@ export const ProfileScreen: React.FC = () => {
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [profileForm, setProfileForm] = useState({ name: user?.name || '', email: user?.email || '', phone: user?.phone || '' });
-  const [profileImage, setProfileImage] = useState(null);
+  const [originalForm, setOriginalForm] = useState({ name: user?.name || '', email: user?.email || '', phone: user?.phone || '' });
+  const [profileImage, setProfileImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [hasFormChanges, setHasFormChanges] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [showImageViewer, setShowImageViewer] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -39,13 +53,16 @@ export const ProfileScreen: React.FC = () => {
     try {
       // Refresh user profile data
       const response = await apiService.getProfile();
-      if (response.data.status && response.data.data) {
+      if (response.data && 'status' in response.data && response.data.status && response.data.data) {
         updateUser(response.data.data);
-        setProfileForm({
+        const newFormData = {
           name: response.data.data.name,
           email: response.data.data.email,
           phone: response.data.data.phone || ''
-        });
+        };
+        setProfileForm(newFormData);
+        setOriginalForm(newFormData);
+        setHasFormChanges(false);
       }
     } catch (error) {
       console.error('Failed to refresh profile:', error);
@@ -62,7 +79,15 @@ export const ProfileScreen: React.FC = () => {
       icon: 'person-outline',
       onPress: () => {
         console.log('Edit Profile pressed');
-        setShowEditProfile(true);
+        const formData = {
+        name: user?.name || '',
+        email: user?.email || '',
+        phone: user?.phone || ''
+      };
+      setProfileForm(formData);
+      setOriginalForm(formData);
+      setHasFormChanges(false);
+      setShowEditProfile(true);
       },
     },
     {
@@ -153,8 +178,6 @@ export const ProfileScreen: React.FC = () => {
 
   const privacyPolicyText = `Driver Privacy Policy & Guidelines
 
-Last updated: ${new Date().toLocaleDateString()}
-
 As a driver using this waste management system, it's important to understand what information should remain private and confidential.
 
 1. CLIENT INFORMATION - KEEP PRIVATE
@@ -208,11 +231,58 @@ Remember: Protecting client and organizational privacy is part of your professio
       });
 
       if (!result.canceled) {
-        setProfileImage(result.assets[0]);
+        setImagePreview(result.assets[0].uri);
+        await handlePhotoUpload(result.assets[0]);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick image');
     }
+  };
+
+  const handlePhotoUpload = async (image: ImagePicker.ImagePickerAsset) => {
+    try {
+      setUploadingPhoto(true);
+      
+      const formData = new FormData();
+      formData.append('profile_image', {
+        uri: image.uri,
+        type: image.mimeType || 'image/jpeg',
+        name: 'profile.jpg',
+      } as any);
+      
+      // Use fetch instead of axios for FormData to avoid interceptor issues
+      const token = await AsyncStorage.getItem('accessToken');
+      const response = await fetch('http://192.168.1.189:8000/api/auth/update-profile', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+        body: formData,
+      });
+      
+      const data = await response.json();
+      
+      if (data.status && data.data?.user) {
+        updateUser(data.data.user);
+        setImagePreview(null);
+        Alert.alert('Success', 'Profile photo updated successfully!');
+      } else {
+        throw new Error(data.message || 'Upload failed');
+      }
+    } catch (error: any) {
+      setImagePreview(null); // Clear preview on error
+      Alert.alert('Error', error.message || 'Failed to upload photo');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const checkFormChanges = (newForm: typeof profileForm) => {
+    const hasChanges = newForm.name !== originalForm.name || 
+                      newForm.email !== originalForm.email || 
+                      newForm.phone !== originalForm.phone;
+    setHasFormChanges(hasChanges);
   };
 
   const handleChangePassword = async () => {
@@ -257,37 +327,28 @@ Remember: Protecting client and organizational privacy is part of your professio
 
     try {
       setUpdating(true);
-      const formData = new FormData();
-      formData.append('name', profileForm.name);
-      formData.append('email', profileForm.email);
-      if (profileForm.phone) formData.append('phone', profileForm.phone);
-      
-      if (profileImage) {
-        formData.append('profile_image', {
-          uri: profileImage.uri,
-          type: 'image/jpeg',
-          name: 'profile.jpg',
-        } as any);
-      }
+      const requestData = {
+        name: profileForm.name,
+        email: profileForm.email,
+        phone: profileForm.phone || null,
+      };
 
-      const response = await apiService.post('/auth/update-profile', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const response = await apiService.post('/auth/update-profile', requestData);
       
-      // Update user context with new data
       if (response.data.status && response.data.data?.user) {
         updateUser(response.data.data.user);
-        // Update profile form with new data
-        setProfileForm({
+        const newFormData = {
           name: response.data.data.user.name,
           email: response.data.data.user.email,
           phone: response.data.data.user.phone || ''
-        });
+        };
+        setProfileForm(newFormData);
+        setOriginalForm(newFormData);
+        setHasFormChanges(false);
       }
       
       Alert.alert('Success', 'Profile updated successfully');
       setShowEditProfile(false);
-      setProfileImage(null);
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.message || 'Failed to update profile');
     } finally {
@@ -315,17 +376,24 @@ Remember: Protecting client and organizational privacy is part of your professio
       >
         {/* Profile Header */}
         <View style={styles.profileHeader}>
-          <View style={styles.avatarContainer}>
+          <TouchableOpacity 
+            style={styles.avatarContainer}
+            onPress={() => user && 'profile_image' in user && user.profile_image && setShowImageViewer(true)}
+            disabled={!user || !('profile_image' in user) || !user.profile_image}
+          >
             <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-              {user?.profile_image ? (
-                <Image source={{ uri: user.profile_image }} style={styles.avatarImage} />
+              {user && 'profile_image' in user && user.profile_image ? (
+                <Image 
+                  source={{ uri: user.profile_image as string }} 
+                  style={styles.avatarImage}
+                />
               ) : (
                 <Text style={styles.avatarText}>
                   {user?.name?.charAt(0)?.toUpperCase() || 'D'}
                 </Text>
               )}
             </View>
-          </View>
+          </TouchableOpacity>
           
           <Text style={[styles.userName, { color: colors.text }]}>
             {user?.name || 'Driver Name'}
@@ -504,12 +572,12 @@ Remember: Protecting client and organizational privacy is part of your professio
           
           <ScrollView style={styles.fullScreenContent}>
             <View style={styles.profileImageSection}>
-              <TouchableOpacity onPress={handleImagePicker} style={styles.imagePickerButton}>
+              <TouchableOpacity onPress={handleImagePicker} style={styles.imagePickerButton} disabled={uploadingPhoto}>
                 <View style={[styles.imagePreview, { backgroundColor: colors.surface }]}>
-                  {profileImage ? (
-                    <Image source={{ uri: profileImage.uri }} style={styles.previewImage} />
-                  ) : user?.profile_image ? (
-                    <Image source={{ uri: user.profile_image }} style={styles.previewImage} />
+                  {imagePreview ? (
+                    <Image source={{ uri: imagePreview }} style={styles.previewImage} />
+                  ) : user && 'profile_image' in user && user.profile_image ? (
+                    <Image source={{ uri: user.profile_image as string }} style={styles.previewImage} />
                   ) : (
                     <View style={[styles.placeholderImage, { backgroundColor: colors.primary }]}>
                       <Text style={styles.placeholderText}>
@@ -517,52 +585,81 @@ Remember: Protecting client and organizational privacy is part of your professio
                       </Text>
                     </View>
                   )}
+                  {uploadingPhoto && (
+                    <View style={styles.uploadingOverlay}>
+                      <Text style={styles.uploadingText}>Uploading...</Text>
+                    </View>
+                  )}
                 </View>
-                <Text style={[styles.imagePickerText, { color: colors.primary }]}>Change Photo</Text>
+                <Text style={[styles.imagePickerText, { color: uploadingPhoto ? colors.textSecondary : colors.primary }]}>
+                  {uploadingPhoto ? 'Uploading...' : 'Change Photo'}
+                </Text>
               </TouchableOpacity>
             </View>
             
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.text }]}>Name</Text>
               <TextInput
-                style={[styles.textInput, { backgroundColor: colors.surface, color: colors.text }]}
+                style={[styles.textInput, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
                 value={profileForm.name}
-                onChangeText={(text) => setProfileForm({...profileForm, name: text})}
+                onChangeText={(text) => {
+                  const newForm = {...profileForm, name: text};
+                  setProfileForm(newForm);
+                  checkFormChanges(newForm);
+                }}
                 placeholder="Enter your name"
                 placeholderTextColor={colors.textSecondary}
+                editable={!updating}
+                autoCapitalize="words"
               />
             </View>
             
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.text }]}>Email</Text>
               <TextInput
-                style={[styles.textInput, { backgroundColor: colors.surface, color: colors.text }]}
+                style={[styles.textInput, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
                 value={profileForm.email}
-                onChangeText={(text) => setProfileForm({...profileForm, email: text})}
+                onChangeText={(text) => {
+                  const newForm = {...profileForm, email: text};
+                  setProfileForm(newForm);
+                  checkFormChanges(newForm);
+                }}
                 placeholder="Enter your email"
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="email-address"
+                editable={!updating}
+                autoCapitalize="none"
               />
             </View>
             
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.text }]}>Phone</Text>
               <TextInput
-                style={[styles.textInput, { backgroundColor: colors.surface, color: colors.text }]}
+                style={[styles.textInput, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
                 value={profileForm.phone}
-                onChangeText={(text) => setProfileForm({...profileForm, phone: text})}
+                onChangeText={(text) => {
+                  const newForm = {...profileForm, phone: text};
+                  setProfileForm(newForm);
+                  checkFormChanges(newForm);
+                }}
                 placeholder="Enter your phone number"
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="phone-pad"
+                editable={!updating}
               />
             </View>
             
             <TouchableOpacity
-              style={[styles.submitButton, { backgroundColor: colors.primary }]}
+              style={[styles.submitButton, { 
+                backgroundColor: hasFormChanges ? colors.primary : colors.border,
+                opacity: hasFormChanges ? 1 : 0.6
+              }]}
               onPress={handleUpdateProfile}
-              disabled={updating}
+              disabled={updating || !hasFormChanges}
             >
-              <Text style={styles.submitButtonText}>
+              <Text style={[styles.submitButtonText, {
+                color: hasFormChanges ? 'white' : colors.textSecondary
+              }]}>
                 {updating ? 'Updating...' : 'Update Profile'}
               </Text>
             </TouchableOpacity>
@@ -584,6 +681,25 @@ Remember: Protecting client and organizational privacy is part of your professio
           <ScrollView style={styles.fullScreenContent}>
             <Text style={[styles.privacyText, { color: colors.text }]}>{privacyPolicyText}</Text>
           </ScrollView>
+        </View>
+      </Modal>
+      
+      {/* Image Viewer Modal */}
+      <Modal visible={showImageViewer} animationType="fade" onRequestClose={() => setShowImageViewer(false)}>
+        <View style={styles.imageViewerModal}>
+          <TouchableOpacity 
+            style={styles.imageViewerClose}
+            onPress={() => setShowImageViewer(false)}
+          >
+            <Ionicons name="close" as any size={30} color="white" />
+          </TouchableOpacity>
+          {user && 'profile_image' in user && user.profile_image ? (
+            <Image 
+              source={{ uri: user.profile_image as string }} 
+              style={styles.fullScreenImage}
+              resizeMode="contain"
+            />
+          ) : null}
         </View>
       </Modal>
     </View>
@@ -612,6 +728,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   avatarText: {
     color: 'white',
@@ -807,9 +924,26 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 50,
+  },
+  uploadingText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   avatarImage: {
-    width: '100%',
-    height: '100%',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
   privacyText: {
     fontSize: 15,
@@ -861,5 +995,22 @@ const createStyles = (colors: any) => StyleSheet.create({
     position: 'absolute',
     right: 12,
     padding: 8,
+  },
+  imageViewerModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1,
+    padding: 10,
+  },
+  fullScreenImage: {
+    width: '90%',
+    height: '80%',
   },
 });

@@ -57,6 +57,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await apiService.login({ email, password });
       const { token, user: userData } = response.data;
 
+      if (!token || !userData) {
+        throw new Error('Invalid response from server');
+      }
+
       await Promise.all([
         AsyncStorage.setItem('accessToken', token),
         AsyncStorage.setItem('user', JSON.stringify(userData)),

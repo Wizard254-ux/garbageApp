@@ -6,7 +6,6 @@ import { useTheme } from '../../shared/context/ThemeContext';
 
 // Import screens
 import { ModernDashboard } from '../screens/ModernDashboard/ModernDashboard';
-import { PickupsScreen } from '../screens/PickupsScreen/PickupsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen/ProfileScreen';
 import { BagTransferScreen } from '../screens/BagTransferScreen/BagTransferScreen';
 import { TodayHistoryScreen } from '../screens/TodayHistoryScreen/TodayHistoryScreen';
@@ -38,7 +37,6 @@ const DashboardWrapper = () => {
   };
 
   const handleSelectRoute = () => {
-    console.log('Opening route selection modal');
     globalNavigationState.setShowRouteSelection(true);
   };
 

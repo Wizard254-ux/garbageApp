@@ -1,27 +1,50 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, RefreshControl, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, RefreshControl, Modal, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../../shared/context/ThemeContext';
 import { apiService } from '../../../shared/api/axios';
 import { Loading } from '../../../shared/components';
 
+interface PickupItem {
+  id: string;
+  _type: 'picked' | 'unpicked';
+  pickup_status?: string;
+  pickUpDay?: string;
+  client?: {
+    name: string;
+    address: string;
+  };
+  user?: {
+    name: string;
+    address: string;
+  };
+  route?: {
+    name: string;
+  };
+  driver?: {
+    name: string;
+  };
+  pickup_date?: string;
+  created_at?: string;
+}
+
 type FilterType = 'all' | 'picked' | 'unpicked' | 'missed';
 
 export const WeekHistoryScreen: React.FC = () => {
   const { colors } = useTheme();
-  const [pickups, setPickups] = useState([]);
+  const [pickups, setPickups] = useState<PickupItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<FilterType>('all');
   const [routeFilter, setRouteFilter] = useState<string>('all');
   const [showRouteDropdown, setShowRouteDropdown] = useState(false);
-  const [allPickups, setAllPickups] = useState([]);
-  const [routes, setRoutes] = useState([]);
-  const [showMenu, setShowMenu] = useState<number | null>(null);
+  const [allPickups, setAllPickups] = useState<PickupItem[]>([]);
+  const [routes, setRoutes] = useState<string[]>([]);
+  const [showMenu, setShowMenu] = useState<string | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showPickModal, setShowPickModal] = useState(false);
-  const [selectedPickup, setSelectedPickup] = useState<any>(null);
+  const [selectedPickup, setSelectedPickup] = useState<PickupItem | null>(null);
   const [marking, setMarking] = useState(false);
   const [showAuthErrorModal, setShowAuthErrorModal] = useState(false);
   const [showRouteErrorModal, setShowRouteErrorModal] = useState(false);
@@ -60,14 +83,14 @@ export const WeekHistoryScreen: React.FC = () => {
       const response = await apiService.getWeekPickups();
       if (response.data.status) {
         const data = response.data.data;
-        const picked = (data.picked || []).map(item => ({ ...item, _type: 'picked' }));
-        const unpicked = (data.unpicked || []).map(item => ({ ...item, _type: 'unpicked' }));
+        const picked = (data.picked || []).map((item: any) => ({ ...item, _type: 'picked' as const }));
+        const unpicked = (data.unpicked || []).map((item: any) => ({ ...item, _type: 'unpicked' as const }));
         const allData = [...picked, ...unpicked];
         
         setAllPickups(allData);
         
         // Extract unique routes
-        const uniqueRoutes = [...new Set(allData.map(item => item.route?.name).filter(Boolean))];
+        const uniqueRoutes = [...new Set(allData.map(item => item.route?.name).filter(Boolean))] as string[];
         setRoutes(uniqueRoutes);
         
         // Cache the data
@@ -90,7 +113,7 @@ export const WeekHistoryScreen: React.FC = () => {
     return startOfWeek.toISOString().split('T')[0];
   };
 
-  const isPickupMissed = (item: any) => {
+  const isPickupMissed = (item: PickupItem) => {
     if (item._type === 'picked') return false;
     
     const today = new Date();
@@ -99,7 +122,7 @@ export const WeekHistoryScreen: React.FC = () => {
     const currentDayName = dayNames[currentDay];
     
     const pickupDay = item.pickUpDay?.toLowerCase();
-    const pickupDayIndex = dayNames.indexOf(pickupDay);
+    const pickupDayIndex = pickupDay ? dayNames.indexOf(pickupDay) : -1;
     
     return pickupDayIndex !== -1 && pickupDayIndex < currentDay;
   };
@@ -137,7 +160,7 @@ export const WeekHistoryScreen: React.FC = () => {
       // Update local data
       const updatedPickups = allPickups.map(item => 
         item.id === selectedPickup.id 
-          ? { ...item, _type: 'picked', pickup_status: 'picked' }
+          ? { ...item, _type: 'picked' as const, pickup_status: 'picked' }
           : item
       );
       setAllPickups(updatedPickups);
@@ -184,7 +207,7 @@ export const WeekHistoryScreen: React.FC = () => {
     return `${formatDate(startOfWeek)} - ${formatDate(endOfWeek)}`;
   };
 
-  const renderPickupItem = ({ item }: { item: any }) => {
+  const renderPickupItem = ({ item }: { item: PickupItem }) => {
     let status = item.pickup_status || item._type || 'unpicked';
     if (status === 'unpicked' && isPickupMissed(item)) {
       status = 'missed';
@@ -228,7 +251,7 @@ export const WeekHistoryScreen: React.FC = () => {
             <Ionicons name="calendar" size={16} color={colors.textSecondary} />
             <Text style={[styles.infoText, { color: colors.textSecondary }]}>
               {item._type === 'picked' 
-                ? `Picked: ${new Date(item.pickup_date || item.created_at).toLocaleDateString()}`
+                ? `Picked: ${new Date(item.pickup_date || item.created_at || new Date()).toLocaleDateString()}`
                 : `Pickup Day: ${item.pickUpDay || 'Not set'}`
               }
             </Text>
@@ -432,7 +455,7 @@ export const WeekHistoryScreen: React.FC = () => {
                 <View style={styles.detailItem}>
                   <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Date</Text>
                   <Text style={[styles.detailValue, { color: colors.text }]}>
-                    {new Date(selectedPickup.pickup_date || selectedPickup.created_at).toLocaleDateString()}
+                    {new Date(selectedPickup.pickup_date || selectedPickup.created_at || new Date()).toLocaleDateString()}
                   </Text>
                 </View>
               </View>
@@ -532,7 +555,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   header: {
     padding: 12,
-    paddingTop: 20,
+    paddingTop: 50,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     backgroundColor: colors.surface,

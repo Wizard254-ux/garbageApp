@@ -22,7 +22,7 @@ api.interceptors.request.use(
     
     console.log('🚀 API Request:', {
       method: config.method?.toUpperCase(),
-      url: config.baseURL + config.url,
+      url: (config.baseURL || '') + (config.url || ''),
       data: config.data,
     });
     return config;

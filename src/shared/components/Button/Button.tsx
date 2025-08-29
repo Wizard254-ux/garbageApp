@@ -1,6 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { theme } from '../../styles/theme';
+import { useTheme } from '../../context/ThemeContext';
 
 interface ButtonProps {
   title: string;
@@ -17,6 +17,40 @@ export const Button: React.FC<ButtonProps> = ({
   disabled = false,
   loading = false
 }) => {
+  const { colors, typography, spacing, borderRadius } = useTheme();
+  
+  const styles = StyleSheet.create({
+    button: {
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.lg,
+      borderRadius: borderRadius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 48,
+    },
+    primary: {
+      backgroundColor: colors.primary,
+    },
+    secondary: {
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: colors.primary,
+    },
+    disabled: {
+      opacity: 0.6,
+    },
+    text: {
+      ...typography.body,
+      fontWeight: '600',
+    },
+    primaryText: {
+      color: '#fff',
+    },
+    secondaryText: {
+      color: colors.primary,
+    },
+  });
+  
   return (
     <TouchableOpacity
       style={[
@@ -28,7 +62,7 @@ export const Button: React.FC<ButtonProps> = ({
       disabled={disabled || loading}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? '#fff' : theme.colors.primary} />
+        <ActivityIndicator color={variant === 'primary' ? '#fff' : colors.primary} />
       ) : (
         <Text style={[styles.text, styles[`${variant}Text`]]}>{title}</Text>
       )}
@@ -36,34 +70,3 @@ export const Button: React.FC<ButtonProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  button: {
-    paddingVertical: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
-    borderRadius: theme.borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 48,
-  },
-  primary: {
-    backgroundColor: theme.colors.primary,
-  },
-  secondary: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-  },
-  disabled: {
-    opacity: 0.6,
-  },
-  text: {
-    ...theme.typography.body,
-    fontWeight: '600',
-  },
-  primaryText: {
-    color: '#fff',
-  },
-  secondaryText: {
-    color: theme.colors.primary,
-  },
-});

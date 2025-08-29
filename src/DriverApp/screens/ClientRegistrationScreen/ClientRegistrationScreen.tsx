@@ -118,41 +118,52 @@ export const ClientRegistrationScreen: React.FC<ClientRegistrationScreenProps> =
 
     setLoading(true);
     try {
-      const formDataToSend = new FormData();
-      formDataToSend.append('name', formData.name);
-      formDataToSend.append('email', formData.email);
-      formDataToSend.append('phone', formData.phone);
-      formDataToSend.append('address', formData.address);
-      formDataToSend.append('route', selectedRoute);
-      formDataToSend.append('clientType', formData.clientType);
-      formDataToSend.append('monthlyRate', (formData.monthlyRate || 0).toString());
-      formDataToSend.append('numberOfUnits', (formData.numberOfUnits || 1).toString());
-      formDataToSend.append('pickUpDay', formData.pickUpDay);
-      formDataToSend.append('serviceStartDate', formData.serviceStartDate);
-      formDataToSend.append('gracePeriod', (formData.gracePeriod || 5).toString());
+      // Prepare JSON payload
+      const requestData: any = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        address: formData.address,
+        route: selectedRoute,
+        clientType: formData.clientType,
+        monthlyRate: formData.monthlyRate,
+        numberOfUnits: formData.numberOfUnits,
+        pickUpDay: formData.pickUpDay,
+        serviceStartDate: formData.serviceStartDate,
+        gracePeriod: formData.gracePeriod,
+      };
       
-      // Add documents as files to FormData
+      // Convert documents to base64 as expected by backend
       if (selectedDocuments && selectedDocuments.length > 0) {
-        console.log('Adding documents to FormData:', selectedDocuments.length);
+        console.log('Converting documents to base64:', selectedDocuments.length);
         
-        selectedDocuments.forEach((doc, index) => {
+        const documentsData = [];
+        for (const doc of selectedDocuments) {
           if (doc && doc.uri && doc.name) {
-            console.log(`Adding document ${index}:`, { uri: doc.uri, type: doc.mimeType, name: doc.name });
-            
-            // React Native FormData file format
-            formDataToSend.append('documents[]', {
-              uri: doc.uri,
-              type: doc.mimeType || 'application/pdf',
-              name: doc.name,
-            } as any);
+            try {
+              const base64 = await FileSystem.readAsStringAsync(doc.uri, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+              
+              documentsData.push({
+                name: doc.name,
+                type: doc.mimeType || 'application/pdf',
+                data: base64
+              });
+              
+              console.log(`Document ${doc.name} converted to base64`);
+            } catch (error) {
+              console.error(`Failed to convert ${doc.name} to base64:`, error);
+            }
           }
-        });
+        }
+        
+        requestData.documents = documentsData;
       }
       
-      console.log('Sending FormData request with files');
+      console.log('Sending JSON request with documents');
       
-      // apiService will auto-detect FormData and set proper headers
-      const response = await apiService.post('/driver/register-client', formDataToSend);
+      const response = await apiService.post('/driver/register-client', requestData);
       
       if (response.data.status) {
         Alert.alert('Success', 'Client registered successfully! The client account is pending approval by the organization.');
@@ -195,6 +206,7 @@ export const ClientRegistrationScreen: React.FC<ClientRegistrationScreenProps> =
 
       <ScrollView 
         style={styles.content} 
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         bounces={true}
         alwaysBounceVertical={true}
@@ -626,5 +638,8 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   datePickerWrapper: {
     marginTop: 10,
+  },
+  scrollContent: {
+    paddingBottom: 100,
   },
 });
